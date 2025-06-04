@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/fetch-shorts",
+      "schedule": "0 */4 * * *"
+    }
+  ]
+}

@@ -17,13 +17,19 @@ export async function saveShorts(shorts: Short[]) {
   console.log(`${shorts.length}개의 쇼츠가 저장되었습니다.`);
 }
 
-export async function getShorts(limit = 20, offset = 0) {
-  const { data, error } = await supabaseAdmin
+export async function getShorts(limit = 20, offset = 0, channelName?: string) {
+  let query = supabaseAdmin
     .from('shorts')
     .select('*')
     .eq('is_embeddable', true)
-    .order('published_at', { ascending: false })
-    .range(offset, offset + limit - 1);
+    .order('published_at', { ascending: false });
+
+  // 채널 필터링이 있는 경우 적용
+  if (channelName) {
+    query = query.eq('channel_name', channelName);
+  }
+
+  const { data, error } = await query.range(offset, offset + limit - 1);
 
   if (error) throw error;
   return data || [];

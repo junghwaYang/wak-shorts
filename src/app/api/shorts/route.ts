@@ -23,7 +23,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
-    const cacheKey = `shorts_${page}_${limit}`;
+    const channelName = searchParams.get('channel') || undefined;
+
+    // 캐시 키에 채널 정보 추가
+    const cacheKey = `shorts_${page}_${limit}_${channelName || 'all'}`;
 
     // 캐시 확인
     const cached = cache[cacheKey];
@@ -32,7 +35,7 @@ export async function GET(request: NextRequest) {
     }
 
     const offset = (page - 1) * limit;
-    const shorts = await getShorts(limit, offset);
+    const shorts = await getShorts(limit, offset, channelName);
 
     const result: ShortsResponse = {
       data: shorts,

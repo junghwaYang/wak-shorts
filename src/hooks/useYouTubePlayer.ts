@@ -15,6 +15,7 @@ export function useYouTubePlayer({ videoId, onReady, onStateChange }: UseYouTube
   const playerRef = useRef<HTMLDivElement>(null);
   const [player, setPlayer] = useState<YT.Player | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
   // 콜백 ref로 변경하여 리렌더링 방지
   const onReadyRef = useRef(onReady);
@@ -30,7 +31,13 @@ export function useYouTubePlayer({ videoId, onReady, onStateChange }: UseYouTube
   }, [onStateChange]);
 
   useEffect(() => {
-    if (!playerRef.current || !window.YT) return;
+    if (!playerRef.current) return;
+
+    // YouTube IFrame API가 로드되었는지 확인
+    if (!window.YT) {
+      setError(new Error('YouTube IFrame API가 로드되지 않았습니다.'));
+      return;
+    }
 
     let ytPlayer: YT.Player;
 
@@ -58,10 +65,14 @@ export function useYouTubePlayer({ videoId, onReady, onStateChange }: UseYouTube
         events: {
           onReady: (event: { target: YT.Player }) => {
             setIsReady(true);
+            setError(null);
             onReadyRef.current?.(event.target);
           },
           onStateChange: (event: { target: YT.Player; data: number }) => {
             onStateChangeRef.current?.(event);
+          },
+          onError: (event: { target: YT.Player; data: number }) => {
+            setError(new Error(`YouTube 플레이어 오류: ${event.data}`));
           },
         },
       });
@@ -69,6 +80,7 @@ export function useYouTubePlayer({ videoId, onReady, onStateChange }: UseYouTube
       setPlayer(ytPlayer);
     } catch (error) {
       console.error('YouTube Player 생성 오류:', error);
+      setError(error instanceof Error ? error : new Error('알 수 없는 오류가 발생했습니다.'));
     }
 
     return () => {
@@ -81,5 +93,6 @@ export function useYouTubePlayer({ videoId, onReady, onStateChange }: UseYouTube
       }
     };
   }, [videoId]);
-  return { playerRef, player, isReady };
+
+  return { playerRef, player, isReady, error };
 }

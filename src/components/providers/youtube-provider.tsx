@@ -1,12 +1,6 @@
-import type { Metadata } from 'next';
-import './globals.css';
-import QueryProvider from '@/context/queryProvider';
-import { YouTubeProvider } from '@/components/providers/youtube-provider';
+'use client';
 
-export const metadata: Metadata = {
-  title: 'Shorts Wak',
-  description: '여러 채널의 우왁굳 쇼츠를 한 곳에서 모아보세요',
-};
+import { useEffect } from 'react';
 
 interface YTPlayer {
   Player: new (
@@ -46,18 +40,16 @@ declare global {
   }
 }
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return (
-    <html lang="ko">
-      <body className="antialiased">
-        <QueryProvider>
-          <YouTubeProvider>{children}</YouTubeProvider>
-        </QueryProvider>
-      </body>
-    </html>
-  );
+export function YouTubeProvider({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    // YouTube IFrame API 로드
+    if (!window.YT) {
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+    }
+  }, []);
+
+  return <>{children}</>;
 }

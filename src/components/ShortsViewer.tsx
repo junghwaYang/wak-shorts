@@ -1,176 +1,227 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useInfiniteQuery, useQueryClient, InfiniteData } from '@tanstack/react-query';
+import Image from 'next/image';
 import ShortsItem from './ShortsItem';
 import { Button } from '@/components/ui/button';
-import Image from 'next/image';
+import { User } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-// API 함수
-const fetchShortsPage = async ({ pageParam }: { pageParam: number }) => {
-  const response = await fetch(`/api/shorts?page=${pageParam}&limit=3`);
+export interface Short {
+  id: number;
+  video_id: string;
+  title: string;
+  channel_name: string;
+  thumbnail_url: string;
+  view_count: number;
+  published_at: string;
+}
 
-  if (!response.ok) {
-    throw new Error('쇼츠를 불러오는데 실패했습니다.');
-  }
+interface Channel {
+  id: number;
+  channel_name: string;
+  is_active: boolean;
+}
 
-  return response.json();
-};
+interface ShortsResponse {
+  data: Short[];
+  page: number;
+  hasMore: boolean;
+}
 
 export default function ShortsViewer() {
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [userInteracted, setUserInteracted] = useState(false);
-  const [globalMuted, setGlobalMuted] = useState(true); // 전역 음소거 상태
-  // const observerRef = useRef<IntersectionObserver | null>(null);
+  const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
+  const [showChannelDropdown, setShowChannelDropdown] = useState(false);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [globalMuted, setGlobalMuted] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const queryClient = useQueryClient();
 
-  // React Query를 사용한 무한 쿼리
-  const {
-    data,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useInfiniteQuery({
-    queryKey: ['shorts'],
-    queryFn: fetchShortsPage,
-    initialPageParam: 1,
-    getNextPageParam: (lastPage, allPages) => {
-      return lastPage.hasMore ? allPages.length + 1 : undefined;
+  // 채널 목록 가져오기
+  const { data: channelsData } = useInfiniteQuery<Channel[], Error, InfiniteData<Channel[]>>({
+    queryKey: ['channels'],
+    queryFn: async () => {
+      const response = await fetch('/api/channels');
+      if (!response.ok) throw new Error('Failed to fetch channels');
+      return response.json();
     },
-    staleTime: 5 * 60 * 1000, // 5분간 fresh
-    gcTime: 10 * 60 * 1000, // 10분간 캐시 유지
+    getNextPageParam: () => undefined,
+    initialPageParam: 1,
+    staleTime: 1000 * 60 * 60, // 1시간 동안 캐시 유지
+    gcTime: 1000 * 60 * 60 * 24, // 24시간 동안 캐시 보관
   });
 
-  // 모든 쇼츠 데이터를 평탄화
-  const shorts = data?.pages.flatMap((page) => page.data) ?? [];
-
-  // YouTube API 로드
   useEffect(() => {
-    const loadYouTubeAPI = () => {
-      if (window.YT) return Promise.resolve();
-
-      return new Promise<void>((resolve) => {
-        const script = document.createElement('script');
-        script.src = 'https://www.youtube.com/iframe_api';
-        script.async = true;
-        document.body.appendChild(script);
-
-        window.onYouTubeIframeAPIReady = () => {
-          resolve();
-        };
-      });
-    };
-
-    loadYouTubeAPI();
-  }, []);
-
-  // 무한 스크롤 처리
-  useEffect(() => {
-    // 현재 보고 있는 영상이 마지막에서 2번째가 되면 다음 페이지 로드
-    if (
-      currentIndex >= shorts.length - 2 &&
-      hasNextPage &&
-      !isFetchingNextPage &&
-      shorts.length > 0
-    ) {
-      fetchNextPage();
+    if (channelsData?.pages[0]) {
+      setChannels(channelsData.pages[0]);
     }
-  }, [currentIndex, shorts.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, [channelsData]);
 
-  const handleActivate = useCallback(
-    (index: number) => {
-      if (index !== currentIndex) {
-        setCurrentIndex(index);
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, status, refetch } =
+    useInfiniteQuery<ShortsResponse, Error, InfiniteData<ShortsResponse>, [string, string]>({
+      queryKey: ['shorts', selectedChannel ?? 'all'],
+      queryFn: async ({ pageParam = 1 }) => {
+        const page = typeof pageParam === 'number' ? pageParam : Number(pageParam);
+        const params = new URLSearchParams({
+          page: page.toString(),
+          limit: '3',
+        });
+        if (selectedChannel) {
+          params.append('channel', selectedChannel);
+        }
+        const response = await fetch(`/api/shorts?${params.toString()}`);
+        if (!response.ok) throw new Error('Failed to fetch shorts');
+        return response.json() as Promise<ShortsResponse>;
+      },
+      getNextPageParam: (lastPage: ShortsResponse) => {
+        if (!lastPage.hasMore) return undefined;
+        return lastPage.page + 1;
+      },
+      initialPageParam: 1,
+      staleTime: 1000 * 60 * 30, // 30분 동안 캐시 유지
+      gcTime: 1000 * 60 * 60 * 24, // 24시간 동안 캐시 보관
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      refetchOnReconnect: false,
+    });
+
+  const handleChannelSelect = useCallback(
+    async (channelName: string | null) => {
+      setIsLoading(true);
+      setSelectedChannel(channelName);
+      setShowChannelDropdown(false);
+      setActiveIndex(0);
+      try {
+        // 채널 변경 시 캐시된 데이터가 있으면 즉시 사용하고, 없으면 새로 로드
+        const queryKey = ['shorts', channelName ?? 'all'];
+        const cachedData = queryClient.getQueryData(queryKey);
+
+        if (!cachedData) {
+          await refetch();
+        }
+      } finally {
+        setIsLoading(false);
       }
     },
-    [currentIndex]
+    [refetch, queryClient]
   );
 
-  // 사용자 상호작용 시작 (음소거 해제 포함)
-  const handleStartInteraction = () => {
+  // 현재 보이는 영상이 마지막에서 3번째일 때 다음 페이지 미리 로드
+  useEffect(() => {
+    if (data?.pages && data.pages.length > 0) {
+      const totalShorts = data.pages.flatMap((page) => page.data).length;
+
+      // 현재 활성화된 영상이 마지막에서 3번째일 때 다음 페이지 로드
+      if (activeIndex >= totalShorts - 3 && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage();
+      }
+    }
+  }, [activeIndex, data?.pages, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // 다음 페이지 프리로드
+  useEffect(() => {
+    if (data?.pages && data.pages.length > 0 && hasNextPage && !isFetchingNextPage) {
+      const nextPage = data.pages.length + 1;
+      queryClient.prefetchInfiniteQuery({
+        queryKey: ['shorts', selectedChannel ?? 'all'],
+        queryFn: async () => {
+          const params = new URLSearchParams({
+            page: nextPage.toString(),
+            limit: '3',
+          });
+          if (selectedChannel) {
+            params.append('channel', selectedChannel);
+          }
+          const response = await fetch(`/api/shorts?${params.toString()}`);
+          if (!response.ok) throw new Error('Failed to fetch shorts');
+          return response.json();
+        },
+        initialPageParam: nextPage,
+      });
+    }
+  }, [data?.pages, hasNextPage, isFetchingNextPage, selectedChannel, queryClient]);
+
+  const handleActivate = useCallback((index: number) => {
+    setActiveIndex(index);
+  }, []);
+
+  const handleStartInteraction = useCallback(() => {
     setUserInteracted(true);
-    setGlobalMuted(false); // 시작하기 버튼 클릭 시 자동으로 음소거 해제
-  };
+    setGlobalMuted(false);
+  }, []);
 
-  // 전역 음소거 토글
-  const handleGlobalMuteToggle = () => {
-    setGlobalMuted(!globalMuted);
-  };
+  const handleGlobalMuteToggle = useCallback(() => {
+    setGlobalMuted((prev) => !prev);
+  }, []);
 
-  // 재시도 함수
-  const handleRetry = () => {
-    refetch();
-  };
+  const shorts = useMemo(() => {
+    return data?.pages.flatMap((page) => page.data) ?? [];
+  }, [data]);
 
-  if (isLoading) {
+  if (status === 'pending' || isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-black text-white">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-          <p>첫 번째 쇼츠 준비 중...</p>
-          <p className="text-sm text-gray-400 mt-2">빠른 시작을 위해 최소한만 로드합니다</p>
-        </div>
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
       </div>
     );
   }
 
-  if (isError) {
+  if (status === 'error') {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-black text-white">
-        <div className="text-center p-6">
-          <p className="text-red-400 mb-4">
-            {error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.'}
-          </p>
-          <Button onClick={handleRetry} variant="outline">
-            다시 시도
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (shorts.length === 0) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-black text-white">
-        <div className="text-center p-6">
-          <p className="mb-4">사용할 수 있는 쇼츠가 없습니다.</p>
-          <Button onClick={handleRetry} variant="outline">
-            새로고침
-          </Button>
-        </div>
+      <div className="flex items-center justify-center h-screen text-white">
+        <p>쇼츠를 불러오는 중 오류가 발생했습니다.</p>
       </div>
     );
   }
 
   return (
-    <div className="relative w-full h-screen bg-black overflow-hidden">
-      {/* 스크롤 컨테이너 */}
-      <div className="h-full overflow-y-auto snap-y snap-mandatory scrollbar-hide">
-        {shorts.map((short, index) => (
-          <ShortsItem
-            key={`${short.id}-${short.video_id}`}
-            short={short}
-            isActive={index === currentIndex}
-            onActivate={() => handleActivate(index)}
-            userInteracted={userInteracted}
-            globalMuted={globalMuted}
-            onGlobalMuteToggle={handleGlobalMuteToggle}
-          />
-        ))}
+    <div className="relative h-screen bg-black">
+      {/* 상단 프로필 버튼과 드롭다운 */}
+      <div className="absolute top-4 left-4 z-50">
+        <div className="relative">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowChannelDropdown(!showChannelDropdown);
+            }}>
+            <User className="w-5 h-5 text-white" />
+          </Button>
 
-        {/* 무한 스크롤 로딩 */}
-        {isFetchingNextPage && (
-          <div className="h-screen flex items-center justify-center bg-black text-white snap-start">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-              <p>다음 쇼츠 로딩 중...</p>
-              <p className="text-sm text-gray-400 mt-2">{shorts.length}개 로드됨</p>
+          {/* 채널 드롭다운 */}
+          {showChannelDropdown && (
+            <div
+              className="absolute top-full left-0 mt-2 w-48 rounded-md shadow-lg bg-white/10 backdrop-blur-sm border border-white/20"
+              onClick={(e) => e.stopPropagation()}>
+              <div className="py-1 max-h-[300px] overflow-y-auto">
+                <button
+                  className={cn(
+                    'w-full px-4 py-2 text-left text-sm text-white hover:bg-white/20',
+                    selectedChannel === null && 'bg-white/20'
+                  )}
+                  onClick={() => handleChannelSelect(null)}>
+                  전체 채널
+                </button>
+                {channels.map((channel) => (
+                  <button
+                    key={channel.id}
+                    className={cn(
+                      'w-full px-4 py-2 text-left text-sm text-white hover:bg-white/20',
+                      selectedChannel === channel.channel_name && 'bg-white/20'
+                    )}
+                    onClick={() => handleChannelSelect(channel.channel_name)}>
+                    {channel.channel_name}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* 처음 사용자 상호작용 유도 */}
@@ -184,6 +235,7 @@ export default function ShortsViewer() {
                 width={64}
                 height={64}
                 className="mx-auto mb-4"
+                priority
               />
             </div>
             <h2 className="text-2xl font-bold mb-4">Shorts Wak</h2>
@@ -201,6 +253,21 @@ export default function ShortsViewer() {
           </div>
         </div>
       )}
+
+      {/* 쇼츠 목록 */}
+      <div className="h-full overflow-y-auto snap-y snap-mandatory">
+        {shorts.map((short, index) => (
+          <ShortsItem
+            key={short.id}
+            short={short}
+            isActive={index === activeIndex}
+            onActivate={() => handleActivate(index)}
+            userInteracted={userInteracted}
+            globalMuted={globalMuted}
+            onGlobalMuteToggle={handleGlobalMuteToggle}
+          />
+        ))}
+      </div>
     </div>
   );
 }

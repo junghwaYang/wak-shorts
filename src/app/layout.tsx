@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'YouTube 쇼츠 뷰어',
-  description: '여러 채널의 YouTube 쇼츠를 한 곳에서 모아보세요',
+  title: 'Shorts Wak',
+  description: '여러 채널의 우왁굳 쇼츠를 한 곳에서 모아보세요',
 };
 
 interface YTPlayer {

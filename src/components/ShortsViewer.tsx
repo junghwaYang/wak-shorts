@@ -1,20 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Play } from 'lucide-react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import ShortsItem from './ShortsItem';
 import { Button } from '@/components/ui/button';
-
-// interface Short {
-//   id: number;
-//   video_id: string;
-//   title: string;
-//   channel_name: string;
-//   thumbnail_url: string;
-//   view_count: number;
-//   published_at: string;
-// }
+import Image from 'next/image';
 
 // API 함수
 const fetchShortsPage = async ({ pageParam }: { pageParam: number }) => {
@@ -188,39 +178,29 @@ export default function ShortsViewer() {
         <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-40">
           <div className="text-center text-white p-8">
             <div className="mb-6">
-              <Play size={64} className="mx-auto mb-4 text-red-500" />
+              <Image
+                src="/shorts-wak.svg"
+                alt="Shorts Wak Logo"
+                width={64}
+                height={64}
+                className="mx-auto mb-4"
+              />
             </div>
-            <h2 className="text-2xl font-bold mb-4">YouTube Shorts</h2>
-            <p className="text-lg text-gray-300 mb-2">위아래로 스크롤해서 다음 영상을 시청하세요</p>
+            <h2 className="text-2xl font-bold mb-4">Shorts Wak</h2>
+            <p className="text-lg text-gray-300 mb-2 font-semibold">
+              위아래로 스크롤해서 다음 영상을 시청하세요
+            </p>
             <p className="text-sm text-gray-400 mb-2">시작하면 자동으로 소리가 재생됩니다</p>
             <p className="text-xs text-gray-500 mb-8">스크롤하면 다음 영상이 자동으로 로드됩니다</p>
             <Button
               onClick={handleStartInteraction}
               size="lg"
-              className="bg-red-600 hover:bg-red-700 text-white px-8 py-3 text-lg">
+              className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 text-lg font-bold">
               시작하기
             </Button>
           </div>
         </div>
       )}
-
-      {/* 스크롤 힌트 */}
-      {/* {userInteracted && shorts.length > 1 && currentIndex === 0 && (
-        <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 text-white/60 z-30 animate-bounce">
-          <div className="flex flex-col items-center">
-            <div className="w-1 h-8 bg-white/40 rounded-full mb-2"></div>
-            <p className="text-sm">위로 스크롤</p>
-          </div>
-        </div>
-      )} */}
-
-      {/* 진행 상황 표시 */}
-      {/* {userInteracted && shorts.length > 0 && (
-        <div className="absolute top-4 right-4 bg-black/60 text-white rounded-full px-3 py-1 text-sm z-40 backdrop-blur-sm">
-          {currentIndex + 1} / {shorts.length}
-          {hasNextPage ? '+' : ''}
-        </div>
-      )} */}
     </div>
   );
 }

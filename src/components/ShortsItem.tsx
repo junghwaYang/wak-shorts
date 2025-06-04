@@ -4,16 +4,9 @@ import React, { useCallback, useState, useRef, useEffect, memo } from 'react';
 import { Play, Pause, Volume2, VolumeX, ExternalLink, RotateCcw } from 'lucide-react';
 import { useYouTubePlayer } from '@/hooks/useYouTubePlayer';
 import { Button } from '@/components/ui/button';
-
-interface Short {
-  id: number;
-  video_id: string;
-  title: string;
-  channel_name: string;
-  thumbnail_url: string;
-  view_count: number;
-  published_at: string;
-}
+import { Short } from '@/types';
+import { formatTime, formatViewCount, formatRelativeTime } from '@/utils/format';
+import { UI_TIMINGS } from '@/constants';
 
 interface ShortsItemProps {
   short: Short;
@@ -24,6 +17,37 @@ interface ShortsItemProps {
   onGlobalMuteToggle: () => void;
 }
 
+/**
+ * 개별 Shorts 비디오 아이템 컴포넌트
+ *
+ * @description 단일 YouTube Shorts 비디오를 표시하고 제어하는 컴포넌트
+ * - YouTube Player API를 통한 비디오 재생
+ * - 진행률 표시 및 시크 기능
+ * - 재생/일시정지, 음소거 제어
+ * - Intersection Observer를 통한 자동 활성화
+ *
+ * @param props - 컴포넌트 props
+ * @param props.short - 쇼츠 비디오 데이터
+ * @param props.isActive - 현재 활성 상태 여부
+ * @param props.onActivate - 활성화 콜백 함수
+ * @param props.userInteracted - 사용자 상호작용 여부
+ * @param props.globalMuted - 전역 음소거 상태
+ * @param props.onGlobalMuteToggle - 전역 음소거 토글 함수
+ *
+ * @returns {JSX.Element} ShortsItem 컴포넌트
+ *
+ * @example
+ * ```tsx
+ * <ShortsItem
+ *   short={shortData}
+ *   isActive={true}
+ *   onActivate={() => {}}
+ *   userInteracted={true}
+ *   globalMuted={false}
+ *   onGlobalMuteToggle={() => {}}
+ * />
+ * ```
+ */
 const ShortsItem = memo(function ShortsItem({
   short,
   isActive,
@@ -88,6 +112,11 @@ const ShortsItem = memo(function ShortsItem({
     },
   });
 
+  /**
+   * 비디오 진행률을 업데이트하는 함수
+   *
+   * @description 현재 재생 시간과 총 재생 시간을 가져와서 상태를 업데이트
+   */
   const updateProgress = useCallback(() => {
     if (!player || !isReady || isDragging) return;
 
@@ -108,7 +137,7 @@ const ShortsItem = memo(function ShortsItem({
 
   useEffect(() => {
     if (isPlaying && !isDragging) {
-      progressUpdateRef.current = setInterval(updateProgress, 1000); // 500ms에서 1000ms로 변경
+      progressUpdateRef.current = setInterval(updateProgress, UI_TIMINGS.PROGRESS_UPDATE_INTERVAL);
     } else {
       if (progressUpdateRef.current) {
         clearInterval(progressUpdateRef.current);
@@ -122,6 +151,12 @@ const ShortsItem = memo(function ShortsItem({
     };
   }, [isPlaying, isDragging, updateProgress]);
 
+  /**
+   * 비디오 시크 처리 함수
+   *
+   * @description 특정 퍼센티지 위치로 비디오를 이동
+   * @param percentage - 이동할 위치 (0-100%)
+   */
   const handleSeek = useCallback(
     (percentage: number) => {
       if (!player || !isReady || duration === 0) return;
@@ -137,6 +172,12 @@ const ShortsItem = memo(function ShortsItem({
     [player, isReady, duration]
   );
 
+  /**
+   * 진행률 바 클릭 처리 함수
+   *
+   * @description 클릭한 위치로 비디오를 시크하고 시간 정보를 표시
+   * @param e - 마우스 클릭 이벤트
+   */
   const handleProgressClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       e.stopPropagation();
@@ -155,7 +196,7 @@ const ShortsItem = memo(function ShortsItem({
 
       timeInfoTimerRef.current = setTimeout(() => {
         setShowTimeInfo(false);
-      }, 2000);
+      }, UI_TIMINGS.TIME_INFO_HIDE_DELAY);
 
       setTimeout(() => {
         setIsDragging(false);
@@ -164,6 +205,11 @@ const ShortsItem = memo(function ShortsItem({
     [handleSeek]
   );
 
+  /**
+   * 진행률 바 호버 처리 함수
+   *
+   * @description 진행률 바에 마우스를 올렸을 때 시간 정보 표시
+   */
   const handleProgressHover = useCallback(() => {
     setShowTimeInfo(true);
 
@@ -172,6 +218,11 @@ const ShortsItem = memo(function ShortsItem({
     }
   }, []);
 
+  /**
+   * 진행률 바 호버 종료 처리 함수
+   *
+   * @description 마우스가 진행률 바에서 벗어났을 때 시간 정보 숨김
+   */
   const handleProgressLeave = useCallback(() => {
     if (!isDragging) {
       timeInfoTimerRef.current = setTimeout(() => {
@@ -180,14 +231,11 @@ const ShortsItem = memo(function ShortsItem({
     }
   }, [isDragging]);
 
-  const formatTime = useCallback((seconds: number) => {
-    if (!seconds || isNaN(seconds)) return '0:00';
-
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }, []);
-
+  /**
+   * 컨트롤 UI를 일시적으로 표시하는 함수
+   *
+   * @description 사용자 상호작용 시 컨트롤을 표시하고 일정 시간 후 숨김
+   */
   const showControlsTemporarily = useCallback(() => {
     setShowControls(true);
 
@@ -197,9 +245,14 @@ const ShortsItem = memo(function ShortsItem({
 
     controlsTimerRef.current = setTimeout(() => {
       setShowControls(false);
-    }, 3000);
+    }, UI_TIMINGS.CONTROLS_HIDE_DELAY);
   }, []);
 
+  /**
+   * 화면 탭 처리 함수
+   *
+   * @description 화면을 탭했을 때 컨트롤을 임시로 표시
+   */
   const handleScreenTap = useCallback(() => {
     if (!userInteracted) return;
     showControlsTemporarily();
@@ -312,28 +365,6 @@ const ShortsItem = memo(function ShortsItem({
     };
   }, []);
 
-  const formatViewCount = useCallback((count: number) => {
-    if (count >= 1000000) {
-      return `${(count / 1000000).toFixed(1)}M`;
-    } else if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}K`;
-    }
-    return count.toString();
-  }, []);
-
-  const getTimeAgo = useCallback((dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-
-    if (diffInHours < 24) {
-      return `${diffInHours}시간 전`;
-    } else {
-      const diffInDays = Math.floor(diffInHours / 24);
-      return `${diffInDays}일 전`;
-    }
-  }, []);
-
   return (
     <div
       ref={targetRef}
@@ -368,12 +399,12 @@ const ShortsItem = memo(function ShortsItem({
             : 'bg-transparent'
         }`}>
         <div
-          className={`flex justify-between items-start pt-safe transition-opacity duration-300 ${
+          className={`flex justify-between items-start pt-safe transition-opacity duration-300 pl-15 ${
             showControls ? 'opacity-100' : 'opacity-0'
           }`}>
           <div className="text-white flex-1">
             <h3 className="font-bold text-base">{short.channel_name}</h3>
-            <p className="text-sm text-white/90 mt-1">{getTimeAgo(short.published_at)}</p>
+            <p className="text-sm text-white/90 mt-1">{formatRelativeTime(short.published_at)}</p>
           </div>
           <Button
             onClick={(e) => {

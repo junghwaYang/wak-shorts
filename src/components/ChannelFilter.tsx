@@ -1,38 +1,40 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { useChannels } from '@/hooks/useChannels';
 
-interface Channel {
-  id: number;
-  channel_name: string;
-  is_active: boolean;
-}
-
+/**
+ * 채널 필터링 컴포넌트
+ *
+ * @description 활성화된 채널 목록을 버튼 형태로 표시하고 필터링 기능을 제공
+ * - URL 파라미터 기반 상태 관리
+ * - 선택된 채널에 따른 스타일 변경
+ * - 전체 채널 보기 옵션
+ *
+ * @returns {JSX.Element} 채널 필터 컴포넌트
+ *
+ * @example
+ * ```tsx
+ * <ChannelFilter />
+ * ```
+ */
 export default function ChannelFilter() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [channels, setChannels] = useState<Channel[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<string | null>(
     searchParams.get('channel')
   );
 
-  useEffect(() => {
-    // 활성화된 채널 목록 가져오기
-    const fetchChannels = async () => {
-      try {
-        const response = await fetch('/api/channels');
-        const data = await response.json();
-        setChannels(data);
-      } catch (error) {
-        console.error('채널 목록 조회 오류:', error);
-      }
-    };
+  const { channels } = useChannels();
 
-    fetchChannels();
-  }, []);
-
+  /**
+   * 채널 선택 처리 함수
+   *
+   * @description 선택된 채널을 URL 파라미터에 반영하고 첫 페이지로 이동
+   * @param channelName - 선택할 채널명 (null인 경우 전체 채널)
+   */
   const handleChannelSelect = (channelName: string | null) => {
     setSelectedChannel(channelName);
 

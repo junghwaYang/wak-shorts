@@ -53,7 +53,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body className="antialiased">
+      <body className="antialiased fixed inset-0">
         <QueryProvider>
           <YouTubeProvider>{children}</YouTubeProvider>
         </QueryProvider>
